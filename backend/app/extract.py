@@ -183,3 +183,46 @@ def extract(image: bytes, api_key: str) -> tuple[str, list[Mark]]:
         return "", []
 
     return document_text, _double_check(document_text, items)
+
+
+def _main(argv: list[str] | None = None) -> int:
+    """실제 비전 LLM으로 고지서 사진 한 장을 돌려보는 수동 검증 도구.
+
+    사용: cd backend && LLM_API_KEY=... python -m app.extract <사진경로>
+    agent.py를 거치지 않고 extract()만 바로 호출하므로, 키가 맞게 동작하는지
+    빠르게 확인하고 싶을 때 쓴다 — 샘플 모드로 숨겨지지 않고 실패가 그대로 보인다.
+    """
+    import argparse
+    import os
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description=_main.__doc__)
+    parser.add_argument("image", help="고지서 사진 경로")
+    parser.add_argument(
+        "--api-key", default=os.environ.get("LLM_API_KEY", ""), help="기본값: LLM_API_KEY 환경변수"
+    )
+    args = parser.parse_args(argv)
+
+    if not args.api_key:
+        print("[!] API 키 없음 — LLM_API_KEY 환경변수를 설정하거나 --api-key로 넘기세요")
+        return 1
+
+    image_path = Path(args.image)
+    if not image_path.exists():
+        print(f"[!] 이미지 없음: {image_path}")
+        return 1
+
+    text, marks = extract(image_path.read_bytes(), args.api_key)
+    if not text:
+        print("[!] 추출 실패 — 호출/파싱 문제로 보임 (agent.py라면 여기서 샘플 모드로 넘어감)")
+        return 1
+
+    print(f"[✓] 원문 ({len(text)}자):\n{text}\n")
+    print(f"[✓] Mark {len(marks)}건:")
+    for mark in marks:
+        print(f"  ({mark.kind}) {mark.text} → {mark.value}  bbox={mark.bbox}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

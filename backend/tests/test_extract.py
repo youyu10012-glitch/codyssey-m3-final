@@ -93,6 +93,37 @@ def test_extract_returns_empty_when_vision_call_fails(monkeypatch):
     assert extract.extract(b"fake", "key") == ("", [])
 
 
+def test_main_fails_without_api_key(monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    exit_code = extract._main([str(tmp_path / "a.jpg")])
+    assert exit_code == 1
+    assert "API 키 없음" in capsys.readouterr().out
+
+
+def test_main_fails_when_image_missing(tmp_path, capsys):
+    missing = tmp_path / "없음.jpg"
+    exit_code = extract._main([str(missing), "--api-key", "dummy"])
+    assert exit_code == 1
+    assert "이미지 없음" in capsys.readouterr().out
+
+
+def test_main_prints_marks_on_success(monkeypatch, tmp_path, capsys):
+    image_path = tmp_path / "a.jpg"
+    image_path.write_bytes(b"fake")
+
+    def fake_extract(image, api_key):
+        return "납부금액: 금 48,200원", [
+            Mark(kind="money", text="금 48,200원", value="48200", bbox=[0, 0, 0.1, 0.1])
+        ]
+
+    monkeypatch.setattr(extract, "extract", fake_extract)
+    exit_code = extract._main([str(image_path), "--api-key", "dummy"])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Mark 1건" in out
+    assert "48200" in out
+
+
 def test_extract_wires_call_vision_and_double_check(monkeypatch):
     def fake_call_vision(image, api_key):
         return {
